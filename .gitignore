@@ -45,8 +45,8 @@ modules.builtin
 #
 # Top-level generic files
 #
-/tags
-/TAGS
+#/tags
+#/TAGS
 /linux
 /vmlinux
 /vmlinux.32
@@ -92,8 +92,8 @@ patches
 series
 
 # cscope files
-cscope.*
-ncscope.*
+#cscope.*
+#ncscope.*
 
 # gnu global files
 GPATH
@@ -104,7 +104,7 @@ GTAGS
 # id-utils files
 ID
 
-*.orig
+#*.orig
 *~
 \#*#
 
@@ -118,7 +118,7 @@ signing_key.x509
 x509.genkey
 
 # Kconfig presets
-all.config
+#all.config
 
 # Kdevelop4
 *.kdev4
