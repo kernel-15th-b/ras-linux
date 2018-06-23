@@ -124,9 +124,11 @@
 		 * As of today (2014) that's exactly the members of the A and R
 		 * classes.
 		 */
- AR_CLASS(	.arm	)
+ AR_CLASS(	.arm	)			@ 180623 hs.kim CONFIG_CPU_V7M 가 define 되어 있지 않을 경우만, 의미 있음. 
+ 								@ 180623 hs.kim AR_CLASS(xxx) xxx 로 동작.. 즉, .arm 과 동일한 의미.
+
 start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요 
-		.type	start,#function
+		.type	start,#function		@ 180623 hs.kim .type에 의해 'start'라는 함수(fucntion)를 심볼로 정의.
 		.rept	7
 		__nop
 		.endr
@@ -151,7 +153,7 @@ start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요
  ARM_BE8(	setend	be		)	@ go BE8 if compiled for BE8
 								@ 180609 bj.jung CPSR 레지스터 9번 비트 endian 설정, little endian 사용(?)으로 실행 안됨.
 							    @ 180609 bj.jung http://forum.falinux.com/zbxe/index.php?document_srl=575677&mid=lecture_tip								 
- AR_CLASS(	mrs	r9, cpsr	)
+ AR_CLASS(	mrs	r9, cpsr	)		@ 180623 hs.kim 위에서 endian 설정이 바뀌었기 때문에, cpsr의 내용을 r9 레지스터로 저장.
 #ifdef CONFIG_ARM_VIRT_EXT
 		bl	__hyp_stub_install	@ get into SVC mode, reversibly
 								@ 180609 bj.jung 수행되는 내용 없음.
@@ -170,7 +172,7 @@ start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요
 		tst	r2, #3			@ not user?
 						
 							@ 180609 bj.jung  
-							@ tst, CPSR := r2 and #3
+							@ tst, CPSR := r2 and #3(0b11)
 							@ usermode 일 경우 다른 모드로 변환 안됨
 							@ 10000 : usermode
 							@ 10001 : fiq
@@ -191,9 +193,13 @@ start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요
 		mov	r0, #0x17		@ angel_SWIreason_EnterSVC
  ARM(		swi	0x123456	)	@ angel_SWI_ARM
  THUMB(		svc	0xab		)	@ angel_SWI_THUMB
-not_angel:
-		safe_svcmode_maskall r0
+not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은, mode 정보(SVC mode), z 정보(0:0이 아닌 값) 그리고 endian 정보(0:little).
+		safe_svcmode_maskall r0		@ 180623 hs.kim 현재 cpsr의 모드를 SVC모드로 바꾸고, Interrup와 Fast-Interrup를 비활성화 하는 코드.. 
 		msr	spsr_cxsf, r9		@ Save the CPU boot mode in
+								@ 180623 hs.kim... safe_svcmode_maskall에서 cspr을 SVC모드로 바꾸기 이전의 상태(r9에 백업했던 cpsr)를 spsr_cxsf에 저장(백업)
+								@					나중에 기존의 모드(?)로 돌아가야 할 경우, spsr_cxsf의 값을 cpsr로 가져오면 될 듯.. 
+								@					spsr_cxsf에서 c, x, s, f는 하위부터 각각 8bit를 의미한다. 즉, spsr의 모든 비트에 해당함.
+								
 						@ SPSR
 #endif
 		/*
@@ -208,7 +214,14 @@ not_angel:
 
 		.text
 
-#ifdef CONFIG_AUTO_ZRELADDR
+		@ 180623_last
+		@ 180623 hs.kim 					================================================]
+		@ 참고 웹페이지.. 
+		@ https://casionwoo.github.io/jekyll/update/2016/08/03/start-symbol-cont2.html
+		@ http://jake.dothome.co.kr/head-s-1/
+		@ CONFIG_AUTO_ZRELADDR 옵션이 사용될 경우, decompressed 커널이 시작할 물리 주소를 자동으로 계산한다. 
+		@ 추가로 자세한 내용은 차후에..... -_-;;;
+#ifdef CONFIG_AUTO_ZRELADDR					@ 180623 hs.kim... 라즈베리파이의 .config 파일에 Y로 설정되어 있음. 사용됨.
 		/*
 		 * Find the start of physical memory.  As we are executing
 		 * without the MMU on, we are in the physical address space.
@@ -233,6 +246,8 @@ not_angel:
 #else
 		ldr	r4, =zreladdr
 #endif
+		@ 180623 hs.kim 					[================================================
+
 
 		/*
 		 * Set up a page table only if it won't overwrite ourself.

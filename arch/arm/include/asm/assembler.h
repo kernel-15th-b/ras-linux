@@ -343,20 +343,23 @@
  */
 .macro safe_svcmode_maskall reg:req
 #if __LINUX_ARM_ARCH__ >= 6 && !defined(CONFIG_CPU_V7M)
-	mrs	\reg , cpsr
+	mrs	\reg , cpsr					@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은, mode 정보(SVC mode), z 정보(0:0이 아닌 값) 그리고 endian 정보(0:little).
 	eor	\reg, \reg, #HYP_MODE       @ 180609 bj.jung exclusive OR 연산, cpsr ^ 1a
-	tst	\reg, #MODE_MASK            @ 180609 bj.jung exclusive OR 연산,  
+	tst	\reg, #MODE_MASK            @ 180623 hs.kim cpsr := \reg and #MODE_MASK(0x1f)
 
 	bic	\reg , \reg , #MODE_MASK    @ bit clear 
-	orr	\reg , \reg , #PSR_I_BIT | PSR_F_BIT | SVC_MODE
-THUMB(	orr	\reg , \reg , #PSR_T_BIT	)
-	bne	1f
+									@ 180623 hs.kim.. bic(Rd:= Rn and ~R3).. Rn과 R3의 not값을  and 한다. reg 값은 0b00000
+	orr	\reg , \reg , #PSR_I_BIT | PSR_F_BIT | SVC_MODE		@ 180623 hs.kim reg(0b00000)과 R3(0b11010011)을 orr 하면, reg값이 0b11010011로 SVC mode로 됨.
+THUMB(	orr	\reg , \reg , #PSR_T_BIT	)	@ 180623 hs.kim, CONFIG_THUMB2_KERNEL 이 .config 에 설정되지 않아 무시됨.(THUMB(xxx) )
+	bne	1f									@ 180623 hs.kim, bne (앞의 연산 결과 후, cpsr의 z flag 1이면 무시, 0이면 해당 label로 이동...)
+											@ 				 1f는 뒤(forward)에 나오는 1이라는 레이블을 의미함.
 	orr	\reg, \reg, #PSR_A_BIT
 	badr	lr, 2f
 	msr	spsr_cxsf, \reg
 	__MSR_ELR_HYP(14)
 	__ERET
-1:	msr	cpsr_c, \reg
+1:	msr	cpsr_c, \reg			@ 180623 hs.kim.. cpsr_c는 cpsr의 0~7번 비트에 해당함. 즉, reg(0b11010011)값을 cpsr의 하위 8비트에 저장한다.
+								@ 					즉, 어쨋거나 강제로 SVC 모드로 전환한 것. 그리고, Interrupt,Fast-Interrupt 를 비활성화
 2:
 #else
 /*
