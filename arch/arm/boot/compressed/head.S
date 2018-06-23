@@ -125,19 +125,21 @@
 		 * classes.
 		 */
  AR_CLASS(	.arm	)
-start:
+start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요 
 		.type	start,#function
 		.rept	7
 		__nop
 		.endr
 #ifndef CONFIG_THUMB2_KERNEL
-		mov	r0, r0
+		mov	r0, r0				@ 180609 bj.jung __nop와 동일 명령어,
+								@ 180609 bj.jung http://www.iamroot.org/xe/index.php?mid=Programming&document_srl=13334   
 #else
  AR_CLASS(	sub	pc, pc, #3	)	@ A/R: switch to Thumb2 mode
   M_CLASS(	nop.w			)	@ M: already in Thumb2 mode
 		.thumb
 #endif
-		W(b)	1f
+		W(b)	1f				@ 180609 bj.jung b.w는 b가 4byte 명령어 셋으로 인식하게 함, 0x0000_0001
+								@ 180609 bj.jung arch/arm/include/asm/unified.h
 
 		.word	_magic_sig	@ Magic numbers to help the loader
 		.word	_magic_start	@ absolute load/run zImage address
@@ -147,13 +149,17 @@ start:
 		__EFI_HEADER
 1:
  ARM_BE8(	setend	be		)	@ go BE8 if compiled for BE8
+								@ 180609 bj.jung CPSR 레지스터 9번 비트 endian 설정, little endian 사용(?)으로 실행 안됨.
+							    @ 180609 bj.jung http://forum.falinux.com/zbxe/index.php?document_srl=575677&mid=lecture_tip								 
  AR_CLASS(	mrs	r9, cpsr	)
 #ifdef CONFIG_ARM_VIRT_EXT
 		bl	__hyp_stub_install	@ get into SVC mode, reversibly
+								@ 180609 bj.jung 수행되는 내용 없음.
 #endif
 		mov	r7, r1			@ save architecture ID
 		mov	r8, r2			@ save atags pointer
-
+							@ 180609 bj.jung bootloader에서 받은 값 저장 
+							 
 #ifndef CONFIG_CPU_V7M
 		/*
 		 * Booting from Angel - need to enter SVC mode and disable
@@ -162,7 +168,26 @@ start:
 		 */
 		mrs	r2, cpsr		@ get current mode
 		tst	r2, #3			@ not user?
-		bne	not_angel
+						
+							@ 180609 bj.jung  
+							@ tst, CPSR := r2 and #3
+							@ usermode 일 경우 다른 모드로 변환 안됨
+							@ 10000 : usermode
+							@ 10001 : fiq
+							@ 10010 : irq
+							@ 10011 : svc
+							@ 10111 : abt
+							@ 11011 : und
+							@ 11111 : sys
+		bne	not_angel		
+							@ 180609 bj.jung
+							@ tst 연산 결과로 CPSR의 Z플래그가 변경 될 수 있으며(user 모드 일 경우에만,  Z 플래그 1)
+							@ CPSR 의 모드를 검사해서 user 모드가 아닐경우 분기 함.
+							@ zero condtion flag를 확인
+							@ Z == 1 : eq 
+							@ Z == 0 : neq 
+ 							@ https://blogs.msdn.microsoft.com/ntdebugging/2013/11/22/understanding-arm-assembly-part-1/
+							
 		mov	r0, #0x17		@ angel_SWIreason_EnterSVC
  ARM(		swi	0x123456	)	@ angel_SWI_ARM
  THUMB(		svc	0xab		)	@ angel_SWI_THUMB

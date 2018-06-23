@@ -45,8 +45,8 @@ modules.builtin
 #
 # Top-level generic files
 #
-#/tags
-#/TAGS
+/tags
+/TAGS
 /linux
 /vmlinux
 /vmlinux.32
@@ -92,8 +92,8 @@ patches
 series
 
 # cscope files
-#cscope.*
-#ncscope.*
+cscope.*
+ncscope.*
 
 # gnu global files
 GPATH

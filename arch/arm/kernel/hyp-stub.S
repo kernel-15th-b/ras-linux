@@ -41,7 +41,7 @@ ENTRY(__boot_cpu_mode)
 	 */
 	.macro	store_primary_cpu_mode	reg1, reg2, reg3
 	mrs	\reg1, cpsr
-	and	\reg1, \reg1, #MODE_MASK
+	and	\reg1, \reg1, #MODE_MASK    @ 180609 bj.jung http://recipes.egloos.com/4986854
 	adr	\reg2, .L__boot_cpu_mode_offset
 	ldr	\reg3, [\reg2]
 	str	\reg1, [\reg2, \reg3]
@@ -64,7 +64,8 @@ ENTRY(__boot_cpu_mode)
 
 #else	/* ZIMAGE */
 
-	.macro	store_primary_cpu_mode	reg1:req, reg2:req, reg3:req
+	.macro	store_primary_cpu_mode	reg1:req, reg2:req, reg3:req    @ 160809 bj.jung arch/arm/boot/compressed/Makefile에 -DZIMAGE가 정의 되어 있음
+                                                                    @ arugument 갯수 고정, stub로 수행되는 내용 없음.
 	.endm
 
 /*
