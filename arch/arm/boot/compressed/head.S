@@ -239,29 +239,33 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 		 * are already placing their zImage in (eg) the top 64MB
 		 * of this range.
 		 */
-		mov	r4, pc
+		mov	r4, pc                     @ 180630 dh.park pc는 0으로 가정
 		and	r4, r4, #0xf8000000
 		/* Determine final kernel image address. */
-		add	r4, r4, #TEXT_OFFSET
+		add	r4, r4, #TEXT_OFFSET       @ 180630 dh.park /arch/arm/Makefile 에 TEXT_OFFSET := $(textofs-y) 으로 정의되어 있음. textofs-y는 textofs-y :=0x00008000 
+
 #else
 		ldr	r4, =zreladdr
 #endif
 		@ 180623 hs.kim 					[================================================
 
-
+#define 180630_start 
+		
+		@ 180630_start dh.park
 		/*
 		 * Set up a page table only if it won't overwrite ourself.
 		 * That means r4 < pc || r4 - 16k page directory > &_end.
 		 * Given that r4 > &_end is most unfrequent, we add a rough
 		 * additional 1MB of room for a possible appended DTB.
 		 */
-		mov	r0, pc
-		cmp	r0, r4
-		ldrcc	r0, LC0+32
-		addcc	r0, r0, pc
-		cmpcc	r4, r0
-		orrcc	r4, r4, #1		@ remember we skipped cache_on
-		blcs	cache_on
+		mov	r0, pc              @ 180630 dh.park r0는 모름. r4보다 클수도 작을 수도 있다.
+		cmp	r0, r4				@ 180630 dh.park r0 < r4 인 경우에 cpsr의 c 비트가 0로 셋팅. 
+		ldrcc	r0, LC0+32		@ 180630 dh.park XXX{cc}는 이전 연산(지금 소스에서는 cmp)의 결과값이 저장되는 cpsr의 C 비트가 0인 경우에 동작한다. LC0+32는 _end - restart + 16384 + 1024*1024 이다. LC0+32위치에 현재 pc 값을 복사한다.
+		addcc	r0, r0, pc		@ r0(pc) += pc 
+		cmpcc	r4, r0			@ 커널이 복사될 주소(r4)와 pc값을 2배한 값과 비교. r4 < r0 이면 c가 0이 되고 orrcc가 실행됨. 
+		orrcc	r4, r4, #1		@ remember we skipped cache_on 
+								@ r4 = r4 | 1 
+		blcs	cache_on		@ cpsr의 c 비트가 1이면 실행한다. 
 
 restart:	adr	r0, LC0
 		ldmia	r0, {r1, r2, r3, r6, r10, r11, r12}
@@ -661,9 +665,10 @@ params:		ldr	r0, =0x10000100		@ params_phys for RPC
  * This routine must preserve:
  *  r4, r7, r8
  */
-		.align	5
+		.align	5				@ 기존에는 4byte를 1word로 주소를 접근했는데 이제는 2^5byte를 1word로 한다.  
 cache_on:	mov	r3, #8			@ cache_on function
-		b	call_cache_fn
+								@ r3에 8을 저장
+		b	call_cache_fn		@ 
 
 /*
  * Initialize the highest priority protection region, PR7
@@ -890,9 +895,9 @@ __common_mmu_cache_on:
  *  r12 = corrupted
  */
 
-call_cache_fn:	adr	r12, proc_types
-#ifdef CONFIG_CPU_CP15
-		mrc	p15, 0, r9, c0, c0	@ get processor ID
+call_cache_fn:	adr	r12, proc_types                   	@ 180630 dh.park proc_types의 주소를 r12에 복사한다.
+#ifdef CONFIG_CPU_CP15									@ 180630 dh.park .config 파일에 정의됨.
+		mrc	p15, 0, r9, c0, c0	@ get processor ID	  	@ 180630 dh.park r9에 프로세서 ID를 가져온다.
 #elif defined(CONFIG_CPU_V7M)
 		/*
 		 * On v7-M the processor id is located in the V7M_SCB_CPUID
@@ -904,18 +909,19 @@ call_cache_fn:	adr	r12, proc_types
 		 */
 		bx	lr
 #else
-		ldr	r9, =CONFIG_PROCESSOR_ID
+		ldr	r9, =CONFIG_PROCESSOR_ID					@ 180630 dh.park r9에 프로세서 ID를 복사한다.
 #endif
-1:		ldr	r1, [r12, #0]		@ get value
-		ldr	r2, [r12, #4]		@ get mask
-		eor	r1, r1, r9		@ (real ^ match)
-		tst	r1, r2			@       & mask
- ARM(		addeq	pc, r12, r3		) @ call cache function
+1:		ldr	r1, [r12, #0]		@ get value				@ 180630 dh.park proc_types 구조체의 0번재 값을 r1으로 가져온다. 
+		ldr	r2, [r12, #4]		@ get mask				@ 180630 dh.park proc_tyoes 구조체의 1번째 값을 r2로 가져온다.
+		eor	r1, r1, r9		@ (real ^ match)			@ 180630 dh.park 0x41000000 ^ 0x00007700 (프로세서 ID)를 비교해서 r1 복사한다 => 0x41007700 값이 나온다.
+		tst	r1, r2			@       & mask				@ 180630 dh.park 0x41007700 & 0xff00f000 -> 0x41007000 이 나온다. cpsr의 값을  n=0, z=0, c=0 로 업데이트 한다. 
+ ARM(		addeq	pc, r12, r3		) @ call cache function 
+														@ 180630 dh.park arm 이면 실행한다. z값이 0이기 때문에 add 연산을 하지 않는다.
  THUMB(		addeq	r12, r3			)
  THUMB(		moveq	pc, r12			) @ call cache function
-		add	r12, r12, #PROC_ENTRY_SIZE
+		add	r12, r12, #PROC_ENTRY_SIZE					@ 180630 dh.park r12에 0xffffff00 + (4*5) -> 0xffffff14 값을 복사한다.
 		b	1b
-
+@ 180630_last dh.park 하지만 더 봐야해요. 
 /*
  * Table for cache operations.  This is basically:
  *   - CPU ID match
