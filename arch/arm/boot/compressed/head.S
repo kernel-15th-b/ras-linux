@@ -738,45 +738,46 @@ __armv3_mpu_cache_on:
 #define CB_BITS 0x0c
 #endif
 
-__setup_mmu:	sub	r3, r4, #16384		@ Page directory size
-		bic	r3, r3, #0xff		@ Align the pointer
-		bic	r3, r3, #0x3f00
+__setup_mmu:	sub	r3, r4, #16384		@ Page directory size 180707 by.choi r4는 cache_on에서 설정 r4(0x00008000) - #16384 = 16384(0x00004000) 페이지 디렉토리 크기는 16K
+		bic	r3, r3, #0xff		@ Align the pointer 180707 by.choi r3 = r3 & ^#0xff(0x00004000 = 0x00004000 & 0xffffff00)
+		bic	r3, r3, #0x3f00     @ 180707 by.choi r3 = r3 & ^#0x3f00(0x00004000 = 0x00004000 & 0xffffc0ff) 
 /*
  * Initialise the page tables, turning on the cacheable and bufferable
  * bits for the RAM area only.
  */
-		mov	r0, r3
-		mov	r9, r0, lsr #18
-		mov	r9, r9, lsl #18		@ start of RAM
-		add	r10, r9, #0x10000000	@ a reasonable RAM size
-		mov	r1, #0x12		@ XN|U + section mapping
-		orr	r1, r1, #3 << 10	@ AP=11
-		add	r2, r3, #16384
-1:		cmp	r1, r9			@ if virt > start of RAM
-		cmphs	r10, r1			@   && end of RAM > virt
-		bic	r1, r1, #0x1c		@ clear XN|U + C + B
+		mov	r0, r3  @ 180707 by.choi r0=r3(0x00004000)
+		mov	r9, r0, lsr #18 @ 180707 by.choi lsr는 logical shift right FFFFFFFF이면 00003FFF, 0x00004000이면 0x00000000
+		mov	r9, r9, lsl #18		@ start of RAM 180707 by.choi logical shift left 0003FFF면 FFFC0000, 0x00000000 이면 0x0000 앞FFFC값만 남기려함
+		add	r10, r9, #0x10000000	@ a reasonable RAM size 180707 by.choi r10(0x10000000 = 0x00000000 + 0x10000000) ram size:256MB
+		mov	r1, #0x12		@ XN|U + section mapping 180707 by.choi r1=0x12
+		orr	r1, r1, #3 << 10	@ AP=11 180707 by.choi r1(0xc12 = 10010 | 110000000000)
+		add	r2, r3, #16384  @ 180707 by.choi r2(0x00008000 = 0x00004000 + 0x00004000)
+1:		cmp	r1, r9			@ if virt > start of RAM 180707 by.choi r1 > r9 cpsr Z=0 C=1
+		cmphs	r10, r1			@   && end of RAM > virt 180707 by.choi C=1이므로 실행 r10 > r1 cpsr C=1
+		bic	r1, r1, #0x1c		@ clear XN|U + C + B 180707 by.choi r1(0xc02 = 0xc12 & ^0x1c) 
 		orrlo	r1, r1, #0x10		@ Set XN|U for non-RAM
-		orrhs	r1, r1, r6		@ set RAM section settings
-		str	r1, [r0], #4		@ 1:1 mapping
-		add	r1, r1, #1048576
-		teq	r0, r2
-		bne	1b
+		orrhs	r1, r1, r6		@ set RAM section settings 180707 by.choi C=1이므로 실행, r6=0xE, r1(0xc02 = 0xc02 | 0xE)
+		str	r1, [r0], #4		@ 1:1 mapping 180707 by.choi r0에r1을 저장한후에 r0를 4증가
+		add	r1, r1, #1048576 @ 180707 by.choi r1을 1MB 늘림, r1=0x10c0E
+		teq	r0, r2 @ 180707 by.choi teq는 exclusive or, if r0==r2이면 Z=1  
+		bne	1b @ 180707 by.choi Z=0일떄 실행, 반복적으로 수행해서 페이지테이블을 초기화
 /*
  * If ever we are running from Flash, then we surely want the cache
  * to be enabled also for our execution instance...  We map 2MB of it
  * so there is no map overlap problem for up to 1 MB compressed kernel.
  * If the execution is in RAM then we would only be duplicating the above.
  */
-		orr	r1, r6, #0x04		@ ensure B is set for this
-		orr	r1, r1, #3 << 10
-		mov	r2, pc
-		mov	r2, r2, lsr #20
-		orr	r1, r1, r2, lsl #20
-		add	r0, r3, r2, lsl #2
-		str	r1, [r0], #4
-		add	r1, r1, #1048576
-		str	r1, [r0]
-		mov	pc, lr
+		orr	r1, r6, #0x04		@ ensure B is set for this 180707 by.choi r1(0xE = 0xE | 0x04)
+		orr	r1, r1, #3 << 10 @ 180707 by.choi r1(c0e = 0xe | 110000000000)
+		mov	r2, pc 
+		mov	r2, r2, lsr #20 @ 180707 by.choi pc에서 1MB 이하를 날림r2 = PC >> 20
+		orr	r1, r1, r2, lsl #20 @ 180707 by.choi r1(???????00c0e = ???????00000 + c0e)
+		add	r0, r3, r2, lsl #2 @ 180707 by.choi r0 = 0x4000 + PC >> 20 << 2
+		str	r1, [r0], #4 @ 180707 by.choi r0에 r1값을 저장한 후 r0를 4증가
+		add	r1, r1, #1048576 @ 180707 by.choi r1을 1MB 늘림
+		str	r1, [r0] @ 180707 by.choi r1값을 r0에 저장
+		mov	pc, lr @ 180707 by.choi pc에lr을 넣음
+		@ 180707 by.choi last 다음주에 더 보기로함
 ENDPROC(__setup_mmu)
 
 @ Enable unaligned access on v6, to allow better code generation
@@ -813,12 +814,12 @@ __armv4_mmu_cache_on:
 		mov	pc, r12
 
 __armv7_mmu_cache_on:
-		mov	r12, lr
-#ifdef CONFIG_MMU
-		mrc	p15, 0, r11, c0, c1, 4	@ read ID_MMFR0
-		tst	r11, #0xf		@ VMSA
-		movne	r6, #CB_BITS | 0x02	@ !XN
-		blne	__setup_mmu
+		mov	r12, lr @ 180707 by.choi r12에 lr값을 넣음
+#ifdef CONFIG_MMU @ 180707 by.choi .config에 정의됨
+		mrc	p15, 0, r11, c0, c1, 4	@ read ID_MMFR0 180707 by.choi memory model feature정보를 r11에 가져온다.
+		tst	r11, #0xf		@ VMSA 180707 by.choi if ID_MMFR0 지원안하면 Z=1, 지원하면 Z=0
+		movne	r6, #CB_BITS | 0x02	@ !XN 180707 cpsr Z=0이라서 실행, #CB_BITS=0xE
+		blne	__setup_mmu @ 180707 by.choi cpsr Z=0이라서 실행, lr에 다음 명령어 주소를 넣고 점프함
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
 		tst	r11, #0xf		@ VMSA
@@ -909,7 +910,7 @@ call_cache_fn:	adr	r12, proc_types                   	@ 180630 dh.park proc_type
 		 */
 		bx	lr
 #else
-		ldr	r9, =CONFIG_PROCESSOR_ID					@ 180630 dh.park r9에 프로세서 ID를 복사한다.
+		ldr	r9, =CONFIG_PROCESSOR_ID					@ 180707 by.choi 실행안함
 #endif
 1:		ldr	r1, [r12, #0]		@ get value				@ 180630 dh.park proc_types 구조체의 0번재 값을 r1으로 가져온다. 
 		ldr	r2, [r12, #4]		@ get mask				@ 180630 dh.park proc_tyoes 구조체의 1번째 값을 r2로 가져온다.
@@ -919,8 +920,9 @@ call_cache_fn:	adr	r12, proc_types                   	@ 180630 dh.park proc_type
 														@ 180630 dh.park arm 이면 실행한다. z값이 0이기 때문에 add 연산을 하지 않는다.
  THUMB(		addeq	r12, r3			)
  THUMB(		moveq	pc, r12			) @ call cache function
-		add	r12, r12, #PROC_ENTRY_SIZE					@ 180630 dh.park r12에 0xffffff00 + (4*5) -> 0xffffff14 값을 복사한다.
-		b	1b
+		add	r12, r12, #PROC_ENTRY_SIZE					@ 180630 dh.park r12에 0xffffff00 + (4*5) -> 0xffffff14 값을 복사한다. #PROC_ENTRY_SIZE는4*5
+		b	1b @ 180707 by.choi CPU ID가 일치할때까지 비교함, 일치하면 mov pc, lr 실행
+			   @ 180707 by.choi lr값은268line
 @ 180630_last dh.park 하지만 더 봐야해요. 
 /*
  * Table for cache operations.  This is basically:
@@ -1066,7 +1068,7 @@ proc_types:
 
 		.word	0x000f0000		@ new CPU Id
 		.word	0x000f0000
-		W(b)	__armv7_mmu_cache_on
+		W(b)	__armv7_mmu_cache_on @ 180707 by.choi 이부분 진입
 		W(b)	__armv7_mmu_cache_off
 		W(b)	__armv7_mmu_cache_flush
 
