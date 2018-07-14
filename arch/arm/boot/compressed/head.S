@@ -756,9 +756,9 @@ __setup_mmu:	sub	r3, r4, #16384		@ Page directory size 180707 by.choi r4는 cach
 		cmphs	r10, r1			@   && end of RAM > virt 180707 by.choi C=1이므로 실행 r10 > r1 cpsr C=1
 		bic	r1, r1, #0x1c		@ clear XN|U + C + B 180707 by.choi r1(0xc02 = 0xc12 & ^0x1c) 
 		orrlo	r1, r1, #0x10		@ Set XN|U for non-RAM
-		orrhs	r1, r1, r6		@ set RAM section settings 180707 by.choi C=1이므로 실행, r6=0xE, r1(0xc02 = 0xc02 | 0xE)
+		orrhs	r1, r1, r6		@ set RAM section settings 180707 by.choi C=1이므로 실행, r6=0xE, r1(0xc0e = 0xc02 | 0xE)
 		str	r1, [r0], #4		@ 1:1 mapping 180707 by.choi r0에r1을 저장한후에 r0를 4증가
-		add	r1, r1, #1048576 @ 180707 by.choi r1을 1MB 늘림, r1=0x10c0E
+		add	r1, r1, #1048576 @ 180707 by.choi r1을 1MB 늘림, r1=0x100c0E
 		teq	r0, r2 @ 180707 by.choi teq는 exclusive or, if r0==r2이면 Z=1  
 		bne	1b @ 180707 by.choi Z=0일떄 실행, 반복적으로 수행해서 페이지테이블을 초기화
 /*
@@ -821,14 +821,18 @@ __armv7_mmu_cache_on:
 		movne	r6, #CB_BITS | 0x02	@ !XN 180707 cpsr Z=0이라서 실행, #CB_BITS=0xE
 		blne	__setup_mmu @ 180707 by.choi cpsr Z=0이라서 실행, lr에 다음 명령어 주소를 넣고 점프함
 		mov	r0, #0
-		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer
-		tst	r11, #0xf		@ VMSA
+		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer 
+									@ 18.07.14 bj.jung write buffer 비워줌(?) (0으로 채움), cache 사용 중이면 완료 될 떄까지 기다림. 
+		tst	r11, #0xf		@ VMSA 180707 by.choi if ID_MMFR0 지원안하면 Z=1, 지원하면 Z=0
+							@ Virtual Memory System Architecture, MMU 여부 판단
+
 		mcrne	p15, 0, r0, c8, c7, 0	@ flush I,D TLBs
 #endif
 		mrc	p15, 0, r0, c1, c0, 0	@ read control reg
-		bic	r0, r0, #1 << 28	@ clear SCTLR.TRE
+		bic	r0, r0, #1 << 28	@ clear SCTLR.TRE  
+								@ 18.07.14 bj.jung TEX 비트를 모두 OS용으로 사용하지 않고, MMU에 사용, (TEX, C, B 에 따라 Page Table Format 변경) 
 		orr	r0, r0, #0x5000		@ I-cache enable, RR cache replacement
-		orr	r0, r0, #0x003c		@ write buffer
+		orr	r0, r0, #0x003c		@ write buffer 18.07.14 bj.jung write buffer data 캐쉬 enable 설정, RAO/SBOP로 reserved 영역 값을 1로 설정해야 함.
 		bic	r0, r0, #2		@ A (no unaligned access fault)
 		orr	r0, r0, #1 << 22	@ U (v6 unaligned access model)
 						@ (needed for ARM1176)
@@ -838,17 +842,24 @@ __armv7_mmu_cache_on:
 		orrne	r0, r0, #1		@ MMU enabled
 		movne	r1, #0xfffffffd		@ domain 0 = client
 		bic     r6, r6, #1 << 31        @ 32-bit translation system
-		bic     r6, r6, #(7 << 0) | (1 << 4)	@ use only ttbr0
-		mcrne	p15, 0, r3, c2, c0, 0	@ load page table pointer
+										@ 18.07.14 bj.jung TTBCR.EAE (Extended Address Enable) bit를 0으로 세팅, 1일 경우 레지스터 활용이 달라짐.
+		bic     r6, r6, #(7 << 0) | (1 << 4)	@ use only ttbr0 
+												@ 18.07.14 bj.jung TLB MISS 일때, TTBR0를 사용
+		mcrne	p15, 0, r3, c2, c0, 0	@ load page table pointer TTRB0 값을 0x4000으로 설정
 		mcrne	p15, 0, r1, c3, c0, 0	@ load domain access control
+										@ 18.07.14 bj.jung D0(도메인0) client, D1 ~ D15 Manager 모드
 		mcrne   p15, 0, r6, c2, c0, 2   @ load ttb control
+										@ 18.07.14 bj.jung TTBCR 재설정 
 #endif
 		mcr	p15, 0, r0, c7, c5, 4	@ ISB
 		mcr	p15, 0, r0, c1, c0, 0	@ load control register
 		mrc	p15, 0, r0, c1, c0, 0	@ and read it back
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c5, 4	@ ISB
+									@ 18.07.14 bj.jung control register 로드만 수행하고 파이프라인 플러시(?)
 		mov	pc, r12
+
+									@ 18.07.14 bj.jung last
 
 __fa526_cache_on:
 		mov	r12, lr

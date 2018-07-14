@@ -6,7 +6,7 @@
 #include <hv/hypervisor.h>
 
 /* Text loads starting from the supervisor interrupt vector address. */
-#define TEXT_OFFSET MEM_SV_START
+#define TEXT_OFFSET MjM_SV_START
 
 OUTPUT_ARCH(tile)
 ENTRY(_start)
