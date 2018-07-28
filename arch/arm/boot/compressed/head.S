@@ -153,7 +153,7 @@ start:		@ 180609 bj.jung 117 번 라인에서 호출, 추가 확인필요
  ARM_BE8(	setend	be		)	@ go BE8 if compiled for BE8
 								@ 180609 bj.jung CPSR 레지스터 9번 비트 endian 설정, little endian 사용(?)으로 실행 안됨.
 							    @ 180609 bj.jung http://forum.falinux.com/zbxe/index.php?document_srl=575677&mid=lecture_tip								 
- AR_CLASS(	mrs	r9, cpsr	)		@ 180623 hs.kim 위에서 endian 설정이 바뀌었기 때문에, cpsr의 내용을 r9 레지스터로 저장.
+ AR_CLASS(	mrs	r9, cpsr	)		@ 180623 hs.kim cpsr의 내용을 r9 레지스터로 저장.
 #ifdef CONFIG_ARM_VIRT_EXT
 		bl	__hyp_stub_install	@ get into SVC mode, reversibly
 								@ 180609 bj.jung 수행되는 내용 없음.
@@ -260,9 +260,10 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 		 */
 		mov	r0, pc              @ 180630 dh.park r0는 모름. r4보다 클수도 작을 수도 있다.
 		cmp	r0, r4				@ 180630 dh.park r0 < r4 인 경우에 cpsr의 c 비트가 0로 셋팅. 
-		ldrcc	r0, LC0+32		@ 180630 dh.park XXX{cc}는 이전 연산(지금 소스에서는 cmp)의 결과값이 저장되는 cpsr의 C 비트가 0인 경우에 동작한다. LC0+32는 _end - restart + 16384 + 1024*1024 이다. LC0+32위치에 현재 pc 값을 복사한다.
-		addcc	r0, r0, pc		@ r0(pc) += pc 
-		cmpcc	r4, r0			@ 커널이 복사될 주소(r4)와 pc값을 2배한 값과 비교. r4 < r0 이면 c가 0이 되고 orrcc가 실행됨. 
+		ldrcc	r0, LC0+32		@ 180630 dh.park XXX{cc}는 이전 연산(지금 소스에서는 cmp)의 결과값이 저장되는 cpsr의 C 비트가 0인 경우에 동작한다. 
+                                @ 180630 r0에 LC0+32주소 값인  _end - restart + 16384 + 1024*1024 을 복사한다. 
+		addcc	r0, r0, pc		@ r0 += pc
+		cmpcc	r4, r0			@ 커널이 복사될 주소(r4)와 r0값을 비교. r4 < r0 이면 c가 0이 되고 orrcc가 실행됨.
 		orrcc	r4, r4, #1		@ remember we skipped cache_on 
 								@ r4 = r4 | 1 
 		blcs	cache_on		@ cpsr의 c 비트가 1이면 실행한다. 
@@ -478,7 +479,7 @@ dtb_check_done:
 		 */
 0:		adr	r0, 0b
 		movw	r1, #:lower16:__hyp_stub_vectors - 0b
-		movt	r1, #:upper16:__hyp_stub_vectors - 0b
+		movt	r1, #:upper16:__armv7_mmu_cache_on __armv7_mmu_cache_on __hyp_stub_vectors - 0b
 		add	r0, r0, r1
 		sub	r0, r0, r5
 		add	r0, r0, r10
@@ -818,7 +819,7 @@ __armv7_mmu_cache_on:
 #ifdef CONFIG_MMU @ 180707 by.choi .config에 정의됨
 		mrc	p15, 0, r11, c0, c1, 4	@ read ID_MMFR0 180707 by.choi memory model feature정보를 r11에 가져온다.
 		tst	r11, #0xf		@ VMSA 180707 by.choi if ID_MMFR0 지원안하면 Z=1, 지원하면 Z=0
-		movne	r6, #CB_BITS | 0x02	@ !XN 180707 cpsr Z=0이라서 실행, #CB_BITS=0xE
+		movne	r6, #CB_BITS | 0x02	@ !XN 180707 cpsr Z=0이라서 실행,r6 =  #CB_BITS | 0x2 = 0x0E
 		blne	__setup_mmu @ 180707 by.choi cpsr Z=0이라서 실행, lr에 다음 명령어 주소를 넣고 점프함
 		mov	r0, #0
 		mcr	p15, 0, r0, c7, c10, 4	@ drain write buffer 
