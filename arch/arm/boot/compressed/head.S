@@ -214,7 +214,7 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 
 		.text
 
-		@ 180623_last
+		@ 180623 k15b_last
 		@ 180623 hs.kim 					================================================]
 		@ 참고 웹페이지.. 
 		@ https://casionwoo.github.io/jekyll/update/2016/08/03/start-symbol-cont2.html
@@ -267,18 +267,30 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 		orrcc	r4, r4, #1		@ remember we skipped cache_on 
 								@ r4 = r4 | 1 
 		blcs	cache_on		@ cpsr의 c 비트가 1이면 실행한다. 
+		@ 20180828_start
 
 restart:	adr	r0, LC0
+		@ 20180728 je.park LC0 정의:./arch/arm/boot/compressed/head.S +635
+		@ LC0 의 주소를 가져옴
 		ldmia	r0, {r1, r2, r3, r6, r10, r11, r12}
+		@ 20180728 je.park LDM : 다중-레지스터 전송 명령어 중 하나로 여러 개의 레지스터르 읽어 들임
+		@ LDMIA : r0에 있는 주소 값 기준으로 4byte(.word)씩 데이터를 읽어와서 각각 r1, r2, r3, r6, r10, r11, r12에 입력합
 		ldr	sp, [r0, #28]
+		@ 20180728 je.park LDR (immediate offset), r0에서 28 offset의 값을 sp에 로드 함
+		@.word	.L_user_stack_end	@ sp, head.S(같은 파일) 맨 아래에 정의되어 있음
+		@ Example : LDR     r8,[r10]        ; loads R8 from the address in R10.
 
 		/*
 		 * We might be running at a different address.  We need
 		 * to fix up various pointers.
 		 */
 		sub	r0, r0, r1		@ calculate the delta offset
+		@ 20180728 je.park 11.140 SUB, r0에서 r1을 뺀 값을 r0에 저장
 		add	r6, r6, r0		@ _edata
+		@ 20180728 je.park r6에 r0를 더한 값을 r6에 저장
 		add	r10, r10, r0		@ inflated kernel size location
+		@ 20180728 je.park r10에 r0를 더한 값을 r10에 저장
+		@ 20180728 je.park k15b_question r0 값은 변함이 없을 것 같은데 LC0 레이블의 주소값 과 구조체 내부 첫번째(.word LC0)의 값이 실제 실행 될 때 서로 다른가?
 
 		/*
 		 * The kernel build system appends the size of the
@@ -286,17 +298,28 @@ restart:	adr	r0, LC0
 		 * in little-endian form.
 		 */
 		ldrb	r9, [r10, #0]
+		@ 20180728 je.park r9에 r10(offset 0, r10의 1Byte)을 로드 한다.
+		@ r10 --> .word	input_data_end - 4	@ r10 (inflated size location)
+		@ input_data_end : ./arch/arm/boot/compressed/piggy.S 마지막 줄에 있음
 		ldrb	lr, [r10, #1]
+		@ 20180728 je.park lr(link register)에 r10의 1byte offset 값을 로드한다.
 		orr	r9, r9, lr, lsl #8
 		ldrb	lr, [r10, #2]
 		ldrb	r10, [r10, #3]
 		orr	r9, r9, lr, lsl #16
 		orr	r9, r9, r10, lsl #24
+		@ 20180728 je.park Memory에 있는 값을 Endian에 맞춰서 읽어오는 코드
+		@ GZIP 파일은 맨 끝에 압축 전 파일의 사이즈를 가지고 있다.
+		@ Ref1 : https://e4deen.wordpress.com/2014/06/21/39/
+		@ Ref2 : https://andromedarabbit.github.io/old-projects/src/zip/GzipFileFormat.html#ISIZE
 
 #ifndef CONFIG_ZBOOT_ROM
+		@ 20180728 je.park .config 파일에 정의 되어 있지 않으므로 해당 코드가 실행 됨
 		/* malloc space is above the relocated stack (64k max) */
 		add	sp, sp, r0
+		@ 20180728 je.park sp에 (sp+r0) 값을 저장한다.
 		add	r10, sp, #0x10000
+		@ 20180728 je.park r10에 (sp+0x10000) 값을 저장한다.
 #else
 		/*
 		 * With ZBOOT_ROM the bss/stack is non relocatable,
@@ -307,6 +330,7 @@ restart:	adr	r0, LC0
 #endif
 
 		mov	r5, #0			@ init dtb size to 0
+		@ 20180728 je.park 아래 CONFIG_ARM_APPENDED_DTB 값은 .config에서 설정 되지 않기 때문에 아래 define 항목은 넘어감
 #ifdef CONFIG_ARM_APPENDED_DTB
 /*
  *   r0  = delta
@@ -426,6 +450,7 @@ restart:	adr	r0, LC0
 dtb_check_done:
 #endif
 
+		@ 20180728 je.park 위 define  CONFIG_ARM_APPENDED_DTB 구문 타지 않음
 /*
  * Check to see if we will overwrite ourselves.
  *   r4  = final kernel address (possibly with LSB set)
@@ -436,13 +461,19 @@ dtb_check_done:
  *   r4 + image length <= address of wont_overwrite -> OK
  * Note: the possible LSB in r4 is harmless here.
  */
+		@ 20180728 je.park, 16384 = 16 * 1024
+		@ 20180728 je.park, 앞서 r10에 sp + 0x10000 값을 저장함
 		add	r10, r10, #16384
 		cmp	r4, r10
 		bhs	wont_overwrite
+		@ 20180728 je.park, b(branch)hs(carry set), carry가 set인 경우 branch
 		add	r10, r4, r9
 		adr	r9, wont_overwrite
 		cmp	r10, r9
 		bls	wont_overwrite
+		@ 20180728 je.park, wont_overwrite는 현재 Code(head.S) 파일에 있음
+		@ 20180728 je.park, Overwrite 여부를 점검, 실행 시 Overwrite를 하기 때문에 계산 결과들이 wont_overwrite lable로 branch 안하는 것 처럼 보임
+		@ Ref : https://www.slideshare.net/HelloJaewon/linux-kernel-heads-restart-label
 
 /*
  * Relocate ourselves past the end of the decompressed kernel.
@@ -457,18 +488,26 @@ dtb_check_done:
 		 * ourself when the offset is small.
 		 */
 		add	r10, r10, #((reloc_code_end - restart + 256) & ~255)
+		@ 20180728 je.park, reloc_code_end,restart lable의 주소값?을 예측하기 힘듬
+		@ 20180728 je.park, 차 후 lable 주소 참고 하여 다시 보기로 함
 		bic	r10, r10, #255
 
 		/* Get start of code we want to copy and align it down. */
 		adr	r5, restart
 		bic	r5, r5, #31
+		@ 20180728 je.park, bic -> 하위 5bit(0 ~ 4)를 0으로 초기화
 
 /* Relocate the hyp vector base if necessary */
+		@ 20180728 je.park, .config 파일에 CONFIG_ARM_VIRT_EXT 정의되어 있음
 #ifdef CONFIG_ARM_VIRT_EXT
 		mrs	r0, spsr
+		@ 20180728 je.park, spsr의 값을 r0로 복사
 		and	r0, r0, #MODE_MASK
+		@ 20180728 je.park, MODE_MASK	0x0000001f
 		cmp	r0, #HYP_MODE
+		@ 20180728 je.park, HYP_MODE	0x0000001a
 		bne	1f
+		@ 20180728 je.park, Z Flag가 0일 경우 Branch
 
 		/*
 		 * Compute the address of the hyp vectors after relocation.
@@ -486,6 +525,7 @@ dtb_check_done:
 		bl	__hyp_set_vectors
 1:
 #endif
+		@ 20180728 k15b_last, 14주차
 
 		sub	r9, r6, r5		@ size to copy
 		add	r9, r9, #31		@ rounded up to a multiple
@@ -778,7 +818,7 @@ __setup_mmu:	sub	r3, r4, #16384		@ Page directory size 180707 by.choi r4는 cach
 		add	r1, r1, #1048576 @ 180707 by.choi r1을 1MB 늘림
 		str	r1, [r0] @ 180707 by.choi r1값을 r0에 저장
 		mov	pc, lr @ 180707 by.choi pc에lr을 넣음
-		@ 180707 by.choi last 다음주에 더 보기로함
+		@ 180707 k15b_last by.choi 다음주에 더 보기로함
 ENDPROC(__setup_mmu)
 
 @ Enable unaligned access on v6, to allow better code generation
@@ -860,7 +900,7 @@ __armv7_mmu_cache_on:
 									@ 18.07.14 bj.jung control register 로드만 수행하고 파이프라인 플러시(?)
 		mov	pc, r12
 
-									@ 18.07.14 bj.jung last
+									@ 180714 k15b_last bj.jung
 
 __fa526_cache_on:
 		mov	r12, lr
@@ -935,7 +975,7 @@ call_cache_fn:	adr	r12, proc_types                   	@ 180630 dh.park proc_type
 		add	r12, r12, #PROC_ENTRY_SIZE					@ 180630 dh.park r12에 0xffffff00 + (4*5) -> 0xffffff14 값을 복사한다. #PROC_ENTRY_SIZE는4*5
 		b	1b @ 180707 by.choi CPU ID가 일치할때까지 비교함, 일치하면 mov pc, lr 실행
 			   @ 180707 by.choi lr값은268line
-@ 180630_last dh.park 하지만 더 봐야해요. 
+@ 180630 k15b_last dh.park 하지만 더 봐야해요. 
 /*
  * Table for cache operations.  This is basically:
  *   - CPU ID match
