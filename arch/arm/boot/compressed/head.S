@@ -221,7 +221,8 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 		@ http://jake.dothome.co.kr/head-s-1/
 		@ CONFIG_AUTO_ZRELADDR 옵션이 사용될 경우, decompressed 커널이 시작할 물리 주소를 자동으로 계산한다. 
 		@ 추가로 자세한 내용은 차후에..... -_-;;;
-#ifdef CONFIG_AUTO_ZRELADDR					@ 180623 hs.kim... 라즈베리파이의 .config 파일에 Y로 설정되어 있음. 사용됨.
+#ifdef CONFIG_AUTO_ZRELADDR					
+@ 180623 hs.kim... 라즈베리파이의 .config 파일에 Y로 설정되어 있음. 사용됨.
 		/*
 		 * Find the start of physical memory.  As we are executing
 		 * without the MMU on, we are in the physical address space.
@@ -249,7 +250,6 @@ not_angel:						@ 180623 hs.kim 현재 cpsr에서 우리가 알고 있는 값은
 #endif
 		@ 180623 hs.kim 					[================================================
 
-#define 180630_start 
 		
 		@ 180630_start dh.park
 		/*
@@ -465,12 +465,12 @@ dtb_check_done:
 		@ 20180728 je.park, 앞서 r10에 sp + 0x10000 값을 저장함
 		add	r10, r10, #16384
 		cmp	r4, r10
-		bhs	wont_overwrite
+		bhs	wont_overwrite @ 180804 by.choi 겹치지 않으면 점프
 		@ 20180728 je.park, b(branch)hs(carry set), carry가 set인 경우 branch
 		add	r10, r4, r9
 		adr	r9, wont_overwrite
 		cmp	r10, r9
-		bls	wont_overwrite
+		bls	wont_overwrite @ 180804 by.choi 겹치지 않으면 점프
 		@ 20180728 je.park, wont_overwrite는 현재 Code(head.S) 파일에 있음
 		@ 20180728 je.park, Overwrite 여부를 점검, 실행 시 Overwrite를 하기 때문에 계산 결과들이 wont_overwrite lable로 branch 안하는 것 처럼 보임
 		@ Ref : https://www.slideshare.net/HelloJaewon/linux-kernel-heads-restart-label
@@ -518,7 +518,7 @@ dtb_check_done:
 		 */
 0:		adr	r0, 0b
 		movw	r1, #:lower16:__hyp_stub_vectors - 0b
-		movt	r1, #:upper16:__armv7_mmu_cache_on __armv7_mmu_cache_on __hyp_stub_vectors - 0b
+		movt	r1, #:upper16:__hyp_stub_vectors - 0b
 		add	r0, r0, r1
 		sub	r0, r0, r5
 		add	r0, r0, r10
@@ -527,26 +527,26 @@ dtb_check_done:
 #endif
 		@ 20180728 k15b_last, 14주차
 
-		sub	r9, r6, r5		@ size to copy
+		sub	r9, r6, r5		@ size to copy @ 180804 by.choi r6는 _edata(zimage 상단) r5는 restart주소를 32byte allign한 값
 		add	r9, r9, #31		@ rounded up to a multiple
-		bic	r9, r9, #31		@ ... of 32 bytes
-		add	r6, r9, r5
-		add	r9, r9, r10
+		bic	r9, r9, #31		@ ... of 32 bytes @ 180804 by.choi 32byte allign, 현재 r9는 decompressed 사이즈
+		add	r6, r9, r5 @ 180804 by.choi zimage의 끝 위치
+		add	r9, r9, r10 @ 180804 by.choi relocation될 끝 위치
 
 1:		ldmdb	r6!, {r0 - r3, r10 - r12, lr}
 		cmp	r6, r5
-		stmdb	r9!, {r0 - r3, r10 - r12, lr}
-		bhi	1b
+		stmdb	r9!, {r0 - r3, r10 - r12, lr} @ 180804 by.choi r6 ~ restart 까지를 r9 위치로 감소하면서 복사
+		bhi	1b @ 180804 by.choi C and !Z인 경우(r6 > r5)
 
 		/* Preserve offset to relocated code. */
-		sub	r6, r9, r6
+		sub	r6, r9, r6 @ 180804 by.choi 원래 zimage와 재배치된 zimage의 offset
 
 #ifndef CONFIG_ZBOOT_ROM
 		/* cache_clean_flush may use the stack, so relocate it */
-		add	sp, sp, r6
+		add	sp, sp, r6 @ 180804 by.choi sp의 값을 offset만큼 증가시킴
 #endif
 
-		bl	cache_clean_flush
+		bl	cache_clean_flush @ 180804 by.choi cache_clean_flush로 점프, link register에 다음 실행주소 저장
 
 		badr	r0, restart
 		add	r0, r0, r6
@@ -1120,9 +1120,9 @@ proc_types:
 
 		.word	0x000f0000		@ new CPU Id
 		.word	0x000f0000
-		W(b)	__armv7_mmu_cache_on @ 180707 by.choi 이부분 진입
-		W(b)	__armv7_mmu_cache_off
-		W(b)	__armv7_mmu_cache_flush
+		W(b)	__armv7_mmu_cache_on @ 180707 by.choi cache_on에서 점프함 r3=8
+		W(b)	__armv7_mmu_cache_off 
+		W(b)	__armv7_mmu_cache_flush @ 180804 by.choi cache_clean_flush에서 점프함 r3=16
 
 		.word	0			@ unrecognised type
 		.word	0
@@ -1257,22 +1257,23 @@ __armv6_mmu_cache_flush:
 		mov	pc, lr
 
 __armv7_mmu_cache_flush:
-		tst	r4, #1
-		bne	iflush
+		tst	r4, #1 @ 180804 by.choi r4=0x8000
+		bne	iflush @ 180804 by.choi Z=1이므로 실행안됨
 		mrc	p15, 0, r10, c0, c1, 5	@ read ID_MMFR1
-		tst	r10, #0xf << 16		@ hierarchical cache (ARMv7)
+		tst	r10, #0xf << 16		@ hierarchical cache (ARMv7) @ 180804 by.choi 라즈베리파이3는 지원함, 지원하면 값이 0
 		mov	r10, #0
-		beq	hierarchical
+		beq	hierarchical @ 180804 by.choi Z=1이므로 점프
 		mcr	p15, 0, r10, c7, c14, 0	@ clean+invalidate D
 		b	iflush
 hierarchical:
-		mcr	p15, 0, r10, c7, c10, 5	@ DMB
-		stmfd	sp!, {r0-r7, r9-r11}
+		mcr	p15, 0, r10, c7, c10, 5	@ DMB @ 180804 by.choi r10=0 memory 작업이 완료할 때까지 기다린다.
+		stmfd	sp!, {r0-r7, r9-r11} @ 180804 by.choi r0~r7, r9~r11값을 st에 넣는다. 
 		mrc	p15, 1, r0, c0, c0, 1	@ read clidr
-		ands	r3, r0, #0x7000000	@ extract loc from clidr
-		mov	r3, r3, lsr #23		@ left align loc bit field
-		beq	finished		@ if loc is 0, then no need to clean
-		mov	r10, #0			@ start clean at cache level 0
+		ands	r3, r0, #0x7000000	@ extract loc from clidr @ 180804 by.choi and, condition flag update, LOC=2으므로 Z=0
+		mov	r3, r3, lsr #23		@ left align loc bit field @ 180804 by.choi r3=LOC*2, r3=4
+		beq	finished		@ if loc is 0, then no need to clean @ 180804 by.choi Z=0이므로 점프안함
+		mov	r10, #0			@ start clean at cache level 0 @ 180804 by.choi r10=0
+		@ 20180804 k15b_last, 15주차
 loop1:
 		add	r2, r10, r10, lsr #1	@ work out 3x current cache level
 		mov	r1, r0, lsr r2		@ extract cache type bits from clidr
