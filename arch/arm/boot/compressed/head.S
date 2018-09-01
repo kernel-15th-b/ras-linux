@@ -1276,12 +1276,12 @@ hierarchical:
 		@ 20180804 k15b_last, 15주차
 @ 180825 by.choi loop1은 L1 ~ L7 캐시 확인하고 설정
 loop1:
-		add	r2, r10, r10, lsr #1	@ work out 3x current cache level @ 180825 by.choi처음진입 r10 = 0, r2 = 0 / 두번쨰 진입 r10 = 2, r2 = 2 + 1
+		add	r2, r10, r10, lsr #1	@ work out 3x current cache level @ 180825 by.choi 처음진입 r10 = 0, r2 = 0 / 두번쨰 진입 r10 = 2, r2 = 2 + 1
 		mov	r1, r0, lsr r2		@ extract cache type bits from clidr @ 180825 by.choi 처음진입 r0는 r1 = r0 >> 0, 끝 3비트는 Ctype1 / 두번째 진입 r1 = r0 >> 3, 끝 3비트는 Ctype2
-		and	r1, r1, #7		@ mask of the bits for current cache only @ 180825 by.choir1끝에 3비트를 남김, 라즈베리파이3는 L1, L2(L1=0b011 -> seperate i & d cache, L2=0b100 -> unified cache)만 존재, http://infocenter.arm.com/help/topic/com.arm.doc.ddi0500j/BABHCIHB.html
+		and	r1, r1, #7		@ mask of the bits for current cache only @ 180825 by.choi r1끝에 3비트를 남김, 라즈베리파이3는 L1, L2(L1=0b011 -> seperate i & d cache, L2=0b100 -> unified cache)만 존재, http://infocenter.arm.com/help/topic/com.arm.doc.ddi0500j/BABHCIHB.html
 		cmp	r1, #2			@ see what cache we have at this level @ 180825 by.choi r1과 #2 비교, r1 < #2이면 skip 실행
 		blt	skip			@ skip if no cache, or just i-cache @ 180825 by.choi signed less than, r1이 0b000, 0b001인 경우 점프, 캐시 타입 정보 http://jake.dothome.co.kr/cache_clean_flush/
-		mcr	p15, 2, r10, c0, c0, 0	@ select current cache level in cssr @ 180825 by.choi http://infocenter.arm.com/help/topic/com.arm.doc.ddi0500j/BABGHJEA.html
+		mcr	p15, 2, r10, c0, c0, 0	@ select current cache level in cssr @ 180825 by.choi http://infocenter.arm.com/help/topic/com.arm.doc.ddi0500j/BABGHJEA.html 캐시를 선택함, r10=0이면 L1, r10=2이면 L2
 		mcr	p15, 0, r10, c7, c5, 4	@ isb to sych the new cssr&csidr @ 180825 by.choi v8a deprecated
 		mrc	p15, 1, r1, c0, c0, 0	@ read the new csidr  @ 180825 by.choi Cache Size Id Register, r1에 csidr값을 넣는다.
 		and	r2, r1, #7		@ extract the length of the cache lines @ 180825 by.choi 라즈베리파이3 LineSize=0b010, r2 = 2
@@ -1295,21 +1295,23 @@ loop2:
 		mov	r9, r4			@ create working copy of max way size @ 180825 by.choi r9=Associativity값, rpi3 기준 L1인 경우 r4=3, L2인 경우 r4=15
 @ 180825 k15b_last, 16주차
 loop3:
- ARM(		orr	r11, r10, r9, lsl r5	) @ factor way and cache number into r11
- ARM(		orr	r11, r11, r7, lsl r2	) @ factor index number into r11
- THUMB(		lsl	r6, r9, r5		)
+ ARM(		orr	r11, r10, r9, lsl r5	) @ factor way and cache number into r11 @ 180901 by.choi r5=30(clz r5, r4)
+ ARM(		orr	r11, r11, r7, lsl r2	) @ factor index number into r11 @ 180901 by.choi r2=6, r7=NumSets값
+ THUMB(		lsl	r6, r9, r5		) @ 180901 by.choi THUMB 실행안함
  THUMB(		orr	r11, r10, r6		) @ factor way and cache number into r11
  THUMB(		lsl	r6, r7, r2		)
  THUMB(		orr	r11, r11, r6		) @ factor index number into r11
-		mcr	p15, 0, r11, c7, c14, 2	@ clean & invalidate by set/way
-		subs	r9, r9, #1		@ decrement the way
-		bge	loop3
+		mcr	p15, 0, r11, c7, c14, 2	@ clean & invalidate by set/way @ 180901 by.choi NumSets * Associativity만큼 반복하면서 수행
+		subs	r9, r9, #1		@ decrement the way @ 180901 by.choi s가 있으면 condition flag update
+		bge	loop3 @ 180901 by.choi Signed greater than or equal
+
 		subs	r7, r7, #1		@ decrement the index
 		bge	loop2
 skip:
 		add	r10, r10, #2		@ increment cache number @ 180825 by.choi r10에 2를 더함
-		cmp	r3, r10 @ 180825 by.choi r3 = 4, r3 > r10
-		bgt	loop1 @ 180825 by.choi Signed greater than, r3가 크므로 loop1 점프
+		cmp	r3, r10 @ 180825 by.choi r3 = 4
+		bgt	loop1 @ 180825 by.choi Signed greater than, r3 > r10, r10이 4이면 빠져나옴
+		@ 180901 k15b last 17주차
 finished:
 		ldmfd	sp!, {r0-r7, r9-r11}
 		mov	r10, #0			@ switch back to cache level 0
